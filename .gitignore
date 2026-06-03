@@ -12,3 +12,4 @@ wheels/
 AGENTS/
 .claude/
 ralph.sh
+*-session.md
