@@ -34,8 +34,9 @@ A Streamlit web app providing an expanding suite of personal finance calculators
 
 1. Users can add and remove individual loan rows, each with: name, balance ($), APR (%), minimum payment ($).
 2. Each loan optionally accepts a grace period: intro APR (default 0%), end date, and post-grace APR.
-3. A monthly budget slider controls total monthly payment allocation.
+3. A monthly budget slider controls total monthly payment allocation. The slider minimum is locked to the sum of all minimum payments. The slider maximum is set by a separate user-configurable number input.
 4. The app enforces that the monthly budget is greater than or equal to the sum of all minimum payments; if violated, an inline error is shown and calculation is disabled.
+4a. The simulation requires a start date input (defaults to today) used as the reference point for grace period end date comparisons and projected payoff date calculations.
 5. Users can toggle compounding mode between monthly (APR/12 per period) and daily ((1 + APR/365)^days_in_month per period).
 6. The app simulates both snowball (lowest balance first) and avalanche (highest APR first) methods using the same monthly loop.
 7. During simulation, when a payment exceeds a loan's remaining balance, the loan is zeroed and the surplus cascades to the next-priority loan in the same month.
@@ -51,7 +52,7 @@ A Streamlit web app providing an expanding suite of personal finance calculators
 14. The app calculates and prominently displays the composite weighted average APR: `sum(balance * rate) / sum(balance)`.
 15. The app displays the estimated monthly interest cost in dollars: `sum(balance * rate / 12)`.
 16. A table shows per-account: label, balance, APR, monthly interest cost, percentage of total interest burden.
-17. A Plotly chart plots each account by APR (x-axis) and balance (y-axis or bubble size), with a vertical reference line at the composite rate.
+17. A Plotly scatter chart plots each account with APR on the x-axis and balance on the y-axis, with a vertical reference line at the composite rate.
 18. Accounts above the composite rate are colored red (high-priority payoff candidates); accounts at or below are colored green.
 
 ### Architecture
@@ -81,10 +82,12 @@ A Streamlit web app providing an expanding suite of personal finance calculators
 - [ ] R21: `uv run streamlit run Home.py` launches the app with sidebar navigation showing both tools.
 - [ ] R22: `pyproject.toml` and `authorized_libraries.md` list streamlit and plotly with version constraints.
 
-## Open Questions
+## Resolved Decisions (formerly Open Questions)
 
-- Should the budget slider have a configurable max, or should it default to 2x or 3x the sum of minimum payments?
-- Should grace period end dates be calendar dates (tied to a simulation start date) or N-month counts from today?
-- For the composite rate chart, should bubble size represent balance, or should balance be on the y-axis with APR on x? Both encode the same data differently.
-- Is there a desired color theme or brand direction for the app, or default Streamlit styling is fine for v1?
-- Should `Home.py` display a summary/landing page, or immediately redirect to Tool 1?
+| Question | Decision | Notes |
+|----------|----------|-------|
+| Budget slider max | User-configurable number input | Separate input sets the ceiling; slider min stays locked to sum of minimums |
+| Grace period end | Calendar date | Requires a simulation start date input on the page; most accurate for real loan terms |
+| Composite rate chart encoding | APR (x-axis) + balance (y-axis) scatter | Easier to compare exact values; color encodes above/below composite |
+| Color theme | Default Streamlit (v1) | Revisit with a custom palette in a future iteration |
+| Home.py | Landing page with tool descriptions | Brief intro and per-tool summary; user navigates from there |
