@@ -4,10 +4,24 @@
 
 ### Added
 
-- Project scaffold: `src/math_finance_tools` package with `debt_payoff` and `composite_rate` subpackages.
-- `Home.py` entry point using Streamlit `st.navigation` with sidebar routing.
-- Stub pages for Debt Payoff Calculator (`pages/1_Debt_Payoff.py`) and Composite Rate Calculator (`pages/2_Composite_Rate.py`).
-- `pyproject.toml` with `streamlit >= 1.36`, `plotly >= 5.20`, hatchling build backend, ruff and mypy config.
-- PRD (`plans/math-finance-tools-prd.md`) with 22 requirements and acceptance criteria.
-- Task list (`plans/math-finance-tools-prd.json`) with 7 discrete implementation tasks.
-- GitHub repository and 7 issues (#1-#7) created from the PRD.
+- Debt Payoff Calculator UI (`pages/1_Debt_Payoff.py`): dynamic loan rows with
+  stable session-state IDs, per-loan compounding mode (Monthly/Daily), optional
+  grace-period APR toggle, budget ceiling input with slider (min locked to sum of
+  minimum payments), Snowball vs. Avalanche comparison table, Plotly debt-over-time
+  line chart, per-method monthly detail expanders.
+- Composite Rate Calculator UI (`pages/2_Composite_Rate.py`): reactive composite
+  rate computation, `st.metric` for composite APR and monthly interest cost,
+  per-account breakdown table, Plotly APR-vs-balance scatter with red/green
+  coloring and dashed composite-rate reference line.
+- Home landing page (`pages/0_Home.py`) as default navigation entry describing
+  both calculators.
+- Debt payoff core logic (`src/math_finance_tools/debt_payoff/`): `Loan`,
+  `MonthlySnapshot`, `PayoffResult`, `CompoundingMode` models; `apply_compounding`
+  and `simulate_payoff` with Snowball/Avalanche sorting, surplus cascade, grace
+  period support, and per-loan compounding mode.
+- Composite rate core logic (`src/math_finance_tools/composite_rate/`): `Account`,
+  `AccountBreakdown`, `CompositeRateResult`, `calculate_composite_rate`.
+- pytest configuration with 100% branch coverage enforcement; full test suite
+  covering both calculators.
+- Project scaffold: `src/math_finance_tools` package, `Home.py` entry point,
+  stub pages, `pyproject.toml` with ruff, mypy, and hatchling config.
