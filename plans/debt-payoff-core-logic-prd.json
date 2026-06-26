@@ -1,0 +1,147 @@
+[
+  {
+    "task": "Add pytest and coverage tooling to pyproject.toml",
+    "category": "infrastructure",
+    "priority": "high",
+    "done": false,
+    "description": "Add pytest>=8 and pytest-cov>=6 to [dependency-groups] dev. Add [tool.pytest.ini_options] with testpaths, addopts (--cov=src --cov-fail-under=100), and [tool.coverage.run] with branch=true. Run uv sync.",
+    "files_affected": [
+      "pyproject.toml"
+    ],
+    "acceptance_criteria": "uv run pytest --collect-only exits 0. uv run pytest --cov=src runs without configuration errors.",
+    "steps": [
+      "Add pytest>=8 and pytest-cov>=6 to [dependency-groups] dev",
+      "Add [tool.pytest.ini_options] section with testpaths=['tests'] and addopts",
+      "Add [tool.coverage.run] with branch=true and [tool.coverage.report] with show_missing=true",
+      "Run uv sync"
+    ]
+  },
+  {
+    "task": "Create tests package structure",
+    "category": "infrastructure",
+    "priority": "high",
+    "done": false,
+    "description": "Create tests/ and tests/debt_payoff/ directories with empty __init__.py files so pytest discovers the test modules.",
+    "files_affected": [
+      "tests/__init__.py",
+      "tests/debt_payoff/__init__.py"
+    ],
+    "acceptance_criteria": "uv run pytest --collect-only finds tests/debt_payoff/ without errors.",
+    "steps": [
+      "Create tests/__init__.py (empty)",
+      "Create tests/debt_payoff/__init__.py (empty)"
+    ]
+  },
+  {
+    "task": "Implement data models in models.py",
+    "category": "backend",
+    "priority": "high",
+    "done": false,
+    "description": "Define CompoundingMode enum, Loan frozen dataclass (with per-loan compounding_mode field defaulting to MONTHLY, and optional intro_apr/intro_end_date), MonthlySnapshot frozen dataclass, and PayoffResult frozen dataclass with tuple[MonthlySnapshot, ...] snapshots field.",
+    "files_affected": [
+      "src/math_finance_tools/debt_payoff/models.py"
+    ],
+    "acceptance_criteria": "mypy src/ passes strict. All four types importable. FrozenInstanceError raised on field assignment for MonthlySnapshot and PayoffResult. Loan.compounding_mode defaults to CompoundingMode.MONTHLY.",
+    "steps": [
+      "Define CompoundingMode(Enum) with MONTHLY and DAILY values",
+      "Define Loan as @dataclass(frozen=True) with all fields including compounding_mode: CompoundingMode = CompoundingMode.MONTHLY",
+      "Define MonthlySnapshot as @dataclass(frozen=True) with month normalized to date(year, month, 1)",
+      "Define PayoffResult as @dataclass(frozen=True) with snapshots: tuple[MonthlySnapshot, ...]"
+    ]
+  },
+  {
+    "task": "Write test_models.py",
+    "category": "testing",
+    "priority": "high",
+    "done": false,
+    "description": "8 tests covering CompoundingMode values, Loan required and optional fields (including compounding_mode default), MonthlySnapshot and PayoffResult construction, and frozen enforcement on both frozen types.",
+    "files_affected": [
+      "tests/debt_payoff/test_models.py"
+    ],
+    "acceptance_criteria": "pytest tests/debt_payoff/test_models.py passes with 100% coverage on models.py.",
+    "steps": [
+      "test_compounding_mode_values: MONTHLY and DAILY exist and are distinct",
+      "test_loan_required_fields: all required fields round-trip",
+      "test_loan_optional_defaults: intro_apr and intro_end_date default to None",
+      "test_loan_compounding_mode_default: compounding_mode defaults to MONTHLY",
+      "test_loan_with_grace_period: non-None intro fields stored correctly",
+      "test_monthly_snapshot_fields: all six fields verified",
+      "test_payoff_result_fields: all four fields including tuple snapshots",
+      "test_monthly_snapshot_frozen: FrozenInstanceError on assignment",
+      "test_payoff_result_frozen: FrozenInstanceError on assignment"
+    ]
+  },
+  {
+    "task": "Implement apply_compounding and simulate_payoff in calculator.py",
+    "category": "backend",
+    "priority": "high",
+    "done": false,
+    "description": "Implement apply_compounding() with MONTHLY (APR/12) and DAILY ((1+APR/365)^days-1) modes, quantized to $0.01 ROUND_HALF_UP. Implement simulate_payoff() with input validation, sort by method, monthly loop with per-loan compounding mode, surplus cascade, grace period rate switching via (year, month) tuple comparison, and max_months guard.",
+    "files_affected": [
+      "src/math_finance_tools/debt_payoff/calculator.py"
+    ],
+    "acceptance_criteria": "mypy src/ passes strict. ruff check and format pass. All ValueError paths raise on correct conditions. simulate_payoff returns one PayoffResult per loan in original input order.",
+    "steps": [
+      "Define CENTS = Decimal('0.01') module constant",
+      "Implement apply_compounding() with MONTHLY and DAILY branches, quantize on return",
+      "Implement simulate_payoff() input validation (empty, zero-balance, duplicate names, budget, method)",
+      "Determine priority sort order (snowball: balance asc, name tiebreak; avalanche: apr desc, name tiebreak)",
+      "Implement monthly loop: accrue interest per loan using loan.compounding_mode, pay minimums, distribute surplus",
+      "Implement surplus cascade: zero loan, carry remainder to next-priority loan in same month",
+      "Implement grace period: compare (year, month) tuples; use intro_apr when within grace period",
+      "Implement month arithmetic: integer carry-over, no timedelta",
+      "Build and return list[PayoffResult] with tuple(snapshots)"
+    ]
+  },
+  {
+    "task": "Write test_calculator.py",
+    "category": "testing",
+    "priority": "high",
+    "done": false,
+    "description": "Tests covering all 7 acceptance criteria from issue #2, all 6 ValueError branches, apply_compounding unit tests, and any remaining branches for 100% coverage.",
+    "files_affected": [
+      "tests/debt_payoff/test_calculator.py"
+    ],
+    "acceptance_criteria": "pytest --cov=src --cov-fail-under=100 passes with branch=true. All 7 issue ACs have a dedicated test. All ValueError paths tested.",
+    "steps": [
+      "test_single_loan_monthly_payoff_matches_hand_calc (AC2): fixed inputs, hand-computed expected payoff date and total_interest using Decimal arithmetic",
+      "test_snowball_vs_avalanche_different_ordering (AC3): loans where lower-balance has lower APR; assert first-paid-off loan differs between methods",
+      "test_daily_compounding_exceeds_monthly_for_same_apr (AC4): balance=5000, APR=18%, budget=100, ~93 months; assert daily total_interest > monthly",
+      "test_surplus_cascade (AC5): small zero-APR loan + large loan, high budget; assert small loan zeroed month 1, large loan received cascade",
+      "test_grace_period_lower_total_interest (AC6): identical loans, one with 0% intro for 6 months; assert grace total_interest < no-grace",
+      "test_budget_equals_sum_of_minimums_terminates (AC7): each loan min > monthly interest; assert terminates without error",
+      "test_empty_loans_raises, test_zero_balance_loan_raises, test_duplicate_names_raises, test_budget_below_minimums_raises, test_unknown_method_raises, test_max_months_exceeded_raises",
+      "test_apply_compounding_monthly, test_apply_compounding_daily"
+    ]
+  },
+  {
+    "task": "Populate debt_payoff/__init__.py with public re-exports",
+    "category": "backend",
+    "priority": "high",
+    "done": false,
+    "description": "Re-export CompoundingMode, Loan, MonthlySnapshot, PayoffResult, apply_compounding, simulate_payoff using explicit 'X as X' pattern for mypy no_implicit_reexport compatibility. Define __all__.",
+    "files_affected": [
+      "src/math_finance_tools/debt_payoff/__init__.py"
+    ],
+    "acceptance_criteria": "from math_finance_tools.debt_payoff import Loan, simulate_payoff works. mypy passes. __all__ is complete.",
+    "steps": [
+      "Add 'from math_finance_tools.debt_payoff.models import X as X' for all four types",
+      "Add 'from math_finance_tools.debt_payoff.calculator import X as X' for both functions",
+      "Define __all__ listing all six exported names"
+    ]
+  },
+  {
+    "task": "Run full quality gate",
+    "category": "infrastructure",
+    "priority": "high",
+    "done": false,
+    "description": "Verify all tooling passes before committing: ruff format, ruff check, mypy strict, pytest with 100% branch coverage.",
+    "files_affected": [],
+    "acceptance_criteria": "All four commands exit 0: ruff format --check src/ tests/; ruff check src/ tests/; mypy src/; pytest --cov=src --cov-fail-under=100",
+    "steps": [
+      "uv run ruff format src/ tests/ && uv run ruff check src/ tests/",
+      "uv run mypy src/",
+      "uv run pytest --cov=src --cov-report=term-missing"
+    ]
+  }
+]
