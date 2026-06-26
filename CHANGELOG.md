@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-26
+
 ### Added
 
 - Debt Payoff Calculator UI (`pages/1_Debt_Payoff.py`): dynamic loan rows with
