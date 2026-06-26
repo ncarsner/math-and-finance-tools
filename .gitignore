@@ -13,3 +13,4 @@ AGENTS/
 .claude/
 ralph.sh
 *-session.md
+.coverage
