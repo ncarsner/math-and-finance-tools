@@ -11,6 +11,7 @@ wheels/
 
 AGENTS/
 .claude/
+CLAUDE.md
 ralph.sh
 *-session.md
 .coverage
