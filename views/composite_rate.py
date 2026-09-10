@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -8,35 +9,38 @@ from math_finance_tools.composite_rate import Account, calculate_composite_rate
 st.title("Composite Rate Calculator")
 
 # ── Session state initialisation ─────────────────────────────────────────────
+#
+# Streamlit deletes every widget-associated session-state entry when a page
+# stops rendering, so widget keys cannot be the store. Entered values live in
+# `cr_account_values`, a plain key that survives navigation; the widget keys
+# are treated as disposable and reseeded from it on every run.
+
+
+def _account_defaults(n: int) -> dict[str, Any]:
+    return {"label": f"Account {n}", "balance": 1000.0, "apr": 10.0}
+
 
 if "cr_account_ids" not in st.session_state:
     st.session_state.cr_account_ids: list[int] = [0, 1]
     st.session_state.cr_next_id: int = 2
-    st.session_state["cr_label_0"] = "Account 1"
-    st.session_state["cr_balance_0"] = 5000.0
-    st.session_state["cr_apr_0"] = 18.0
-    st.session_state["cr_label_1"] = "Account 2"
-    st.session_state["cr_balance_1"] = 3000.0
-    st.session_state["cr_apr_1"] = 12.0
-
-
-def _account_defaults(account_id: int, n: int) -> None:
-    st.session_state[f"cr_label_{account_id}"] = f"Account {n}"
-    st.session_state[f"cr_balance_{account_id}"] = 1000.0
-    st.session_state[f"cr_apr_{account_id}"] = 10.0
+    st.session_state.cr_account_values: dict[int, dict[str, Any]] = {
+        0: _account_defaults(1) | {"balance": 5000.0, "apr": 18.0},
+        1: _account_defaults(2) | {"balance": 3000.0, "apr": 12.0},
+    }
 
 
 def add_account() -> None:
     new_id: int = st.session_state.cr_next_id
     st.session_state.cr_next_id += 1
-    _account_defaults(new_id, len(st.session_state.cr_account_ids) + 1)
+    st.session_state.cr_account_values[new_id] = _account_defaults(
+        len(st.session_state.cr_account_ids) + 1
+    )
     st.session_state.cr_account_ids.append(new_id)
 
 
 def remove_account(account_id: int) -> None:
     st.session_state.cr_account_ids.remove(account_id)
-    for field in ["label", "balance", "apr"]:
-        st.session_state.pop(f"cr_{field}_{account_id}", None)
+    st.session_state.cr_account_values.pop(account_id, None)
 
 
 # ── Account input rows ───────────────────────────────────────────────────────
@@ -44,17 +48,25 @@ def remove_account(account_id: int) -> None:
 st.subheader("Accounts")
 
 for account_id in st.session_state.cr_account_ids:
+    values = st.session_state.cr_account_values[account_id]
     with st.container(border=True):
         c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
-        c1.text_input("Label", key=f"cr_label_{account_id}")
-        c2.number_input(
-            "Balance ($)", min_value=0.0, step=100.0, key=f"cr_balance_{account_id}"
+        values["label"] = c1.text_input(
+            "Label", value=values["label"], key=f"cr_label_{account_id}"
         )
-        c3.number_input(
+        values["balance"] = c2.number_input(
+            "Balance ($)",
+            min_value=0.0,
+            step=100.0,
+            value=values["balance"],
+            key=f"cr_balance_{account_id}",
+        )
+        values["apr"] = c3.number_input(
             "APR (%)",
             min_value=0.0,
             max_value=100.0,
             step=0.1,
+            value=values["apr"],
             key=f"cr_apr_{account_id}",
         )
         if len(st.session_state.cr_account_ids) > 1:
@@ -72,9 +84,9 @@ st.button("+ Add Account", on_click=add_account)
 
 accounts = [
     Account(
-        label=str(st.session_state.get(f"cr_label_{aid}", f"Account {aid}")),
-        balance=Decimal(str(st.session_state.get(f"cr_balance_{aid}", 0.0))),
-        apr=Decimal(str(st.session_state.get(f"cr_apr_{aid}", 0.0))) / 100,
+        label=str(st.session_state.cr_account_values[aid]["label"]),
+        balance=Decimal(str(st.session_state.cr_account_values[aid]["balance"])),
+        apr=Decimal(str(st.session_state.cr_account_values[aid]["apr"])) / 100,
     )
     for aid in st.session_state.cr_account_ids
 ]
