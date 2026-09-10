@@ -17,3 +17,5 @@ ralph.sh
 .coverage
 plans/
 .*.md
+CONTEXT.md
+docs/

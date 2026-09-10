@@ -32,8 +32,8 @@ uv run streamlit run Home.py
 
 ```bash
 uv run pytest --cov=src            # tests (100% branch coverage required)
-ruff format src/ pages/ Home.py    # format
-ruff check src/ pages/ Home.py     # lint
+ruff format src/ views/ Home.py    # format
+ruff check src/ views/ Home.py     # lint
 mypy src/                          # type-check
 ```
 
