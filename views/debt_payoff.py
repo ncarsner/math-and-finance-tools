@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -9,52 +10,51 @@ from math_finance_tools.debt_payoff import CompoundingMode, Loan, simulate_payof
 
 st.title("Debt Payoff Calculator")
 
+COMPOUNDING_OPTIONS = ["Monthly", "Daily"]
+
 # ── Session state initialisation ─────────────────────────────────────────────
+#
+# Streamlit deletes every widget-associated session-state entry when a page
+# stops rendering, so widget keys cannot be the store. Entered values live in
+# `dp_loan_values`, a plain key that survives navigation; the widget keys are
+# treated as disposable and reseeded from it on every run.
+
+
+def _loan_defaults(n: int) -> dict[str, Any]:
+    return {
+        "name": f"Loan {n}",
+        "balance": 1000.0,
+        "apr": 10.0,
+        "min": 25.0,
+        "comp": "Monthly",
+        "grace": False,
+        "intro_apr": 0.0,
+        "intro_end": date.today(),
+    }
+
 
 if "dp_loan_ids" not in st.session_state:
     st.session_state.dp_loan_ids: list[int] = [0]
     st.session_state.dp_next_id: int = 1
-    st.session_state["dp_name_0"] = "Loan 1"
-    st.session_state["dp_balance_0"] = 5000.0
-    st.session_state["dp_apr_0"] = 18.0
-    st.session_state["dp_min_0"] = 100.0
-    st.session_state["dp_comp_0"] = "Monthly"
-    st.session_state["dp_grace_0"] = False
-    st.session_state["dp_intro_apr_0"] = 0.0
-    st.session_state["dp_intro_end_0"] = date.today()
-
-
-def _loan_defaults(loan_id: int, n: int) -> None:
-    st.session_state[f"dp_name_{loan_id}"] = f"Loan {n}"
-    st.session_state[f"dp_balance_{loan_id}"] = 1000.0
-    st.session_state[f"dp_apr_{loan_id}"] = 10.0
-    st.session_state[f"dp_min_{loan_id}"] = 25.0
-    st.session_state[f"dp_comp_{loan_id}"] = "Monthly"
-    st.session_state[f"dp_grace_{loan_id}"] = False
-    st.session_state[f"dp_intro_apr_{loan_id}"] = 0.0
-    st.session_state[f"dp_intro_end_{loan_id}"] = date.today()
+    st.session_state.dp_loan_values: dict[int, dict[str, Any]] = {
+        0: _loan_defaults(1) | {"balance": 5000.0, "apr": 18.0, "min": 100.0}
+    }
 
 
 def add_loan() -> None:
     new_id: int = st.session_state.dp_next_id
     st.session_state.dp_next_id += 1
-    _loan_defaults(new_id, len(st.session_state.dp_loan_ids) + 1)
+    st.session_state.dp_loan_values[new_id] = _loan_defaults(
+        len(st.session_state.dp_loan_ids) + 1
+    )
     st.session_state.dp_loan_ids.append(new_id)
+    st.session_state.pop("dp_results", None)
 
 
 def remove_loan(loan_id: int) -> None:
     st.session_state.dp_loan_ids.remove(loan_id)
-    for field in [
-        "name",
-        "balance",
-        "apr",
-        "min",
-        "comp",
-        "grace",
-        "intro_apr",
-        "intro_end",
-    ]:
-        st.session_state.pop(f"dp_{field}_{loan_id}", None)
+    st.session_state.dp_loan_values.pop(loan_id, None)
+    st.session_state.pop("dp_results", None)
 
 
 # ── Loan input rows ──────────────────────────────────────────────────────────
@@ -62,19 +62,40 @@ def remove_loan(loan_id: int) -> None:
 st.subheader("Loans")
 
 for loan_id in st.session_state.dp_loan_ids:
+    values = st.session_state.dp_loan_values[loan_id]
     with st.container(border=True):
         c1, c2, c3, c4, c5, c6 = st.columns([2, 2, 2, 2, 2, 1])
-        c1.text_input("Name", key=f"dp_name_{loan_id}")
-        c2.number_input(
-            "Balance ($)", min_value=0.01, step=100.0, key=f"dp_balance_{loan_id}"
+        values["name"] = c1.text_input(
+            "Name", value=values["name"], key=f"dp_name_{loan_id}"
         )
-        c3.number_input(
-            "APR (%)", min_value=0.0, max_value=100.0, step=0.1, key=f"dp_apr_{loan_id}"
+        values["balance"] = c2.number_input(
+            "Balance ($)",
+            min_value=0.01,
+            step=100.0,
+            value=values["balance"],
+            key=f"dp_balance_{loan_id}",
         )
-        c4.number_input(
-            "Min Payment ($)", min_value=0.01, step=10.0, key=f"dp_min_{loan_id}"
+        values["apr"] = c3.number_input(
+            "APR (%)",
+            min_value=0.0,
+            max_value=100.0,
+            step=0.1,
+            value=values["apr"],
+            key=f"dp_apr_{loan_id}",
         )
-        c5.selectbox("Compounding", ["Monthly", "Daily"], key=f"dp_comp_{loan_id}")
+        values["min"] = c4.number_input(
+            "Min Payment ($)",
+            min_value=0.01,
+            step=10.0,
+            value=values["min"],
+            key=f"dp_min_{loan_id}",
+        )
+        values["comp"] = c5.selectbox(
+            "Compounding",
+            COMPOUNDING_OPTIONS,
+            index=COMPOUNDING_OPTIONS.index(values["comp"]),
+            key=f"dp_comp_{loan_id}",
+        )
         if len(st.session_state.dp_loan_ids) > 1:
             c6.button(
                 "✕",
@@ -84,16 +105,26 @@ for loan_id in st.session_state.dp_loan_ids:
                 help="Remove this loan",
             )
 
-        if st.checkbox("Grace period (intro APR)", key=f"dp_grace_{loan_id}"):
+        values["grace"] = st.checkbox(
+            "Grace period (intro APR)",
+            value=values["grace"],
+            key=f"dp_grace_{loan_id}",
+        )
+        if values["grace"]:
             g1, g2 = st.columns(2)
-            g1.number_input(
+            values["intro_apr"] = g1.number_input(
                 "Intro APR (%)",
                 min_value=0.0,
                 max_value=100.0,
                 step=0.1,
+                value=values["intro_apr"],
                 key=f"dp_intro_apr_{loan_id}",
             )
-            g2.date_input("Intro end date", key=f"dp_intro_end_{loan_id}")
+            values["intro_end"] = g2.date_input(
+                "Intro end date",
+                value=values["intro_end"],
+                key=f"dp_intro_end_{loan_id}",
+            )
 
 st.button("+ Add Loan", on_click=add_loan)
 
@@ -101,77 +132,80 @@ st.button("+ Add Loan", on_click=add_loan)
 
 st.subheader("Settings")
 
-start_date: date = st.date_input("Simulation start date", value=date.today())  # type: ignore[assignment]
+if "dp_start_date" not in st.session_state:
+    st.session_state.dp_start_date: date = date.today()
+
+start_date: date = st.date_input(  # type: ignore[assignment]
+    "Simulation start date", value=st.session_state.dp_start_date
+)
+st.session_state.dp_start_date = start_date
 
 sum_minimums = sum(
-    float(st.session_state.get(f"dp_min_{lid}", 0.0))
+    float(st.session_state.dp_loan_values[lid]["min"])
     for lid in st.session_state.dp_loan_ids
 )
+
+ceiling_floor = sum_minimums + 1.0
+stored_ceiling = st.session_state.get("dp_budget_ceiling", 0.0)
+if stored_ceiling < ceiling_floor:
+    stored_ceiling = max(sum_minimums * 2, sum_minimums + 500.0)
 
 set_col, slider_col = st.columns([1, 3])
 budget_ceiling = set_col.number_input(
     "Budget ceiling ($)",
-    min_value=sum_minimums + 1.0,
-    value=max(sum_minimums * 2, sum_minimums + 500.0),
+    min_value=ceiling_floor,
+    value=stored_ceiling,
     step=100.0,
 )
+st.session_state.dp_budget_ceiling = float(budget_ceiling)
+
+stored_budget = float(st.session_state.get("dp_monthly_budget", sum_minimums))
+stored_budget = min(max(stored_budget, sum_minimums), float(budget_ceiling))
+
 monthly_budget = slider_col.slider(
     "Monthly budget ($)",
     min_value=sum_minimums,
     max_value=float(budget_ceiling),
-    value=sum_minimums,
+    value=stored_budget,
     step=1.0,
     help="Drag to set total monthly payment across all loans",
 )
-
-if monthly_budget < sum_minimums:
-    st.error(
-        f"Budget (${monthly_budget:,.2f}) is below the sum of minimum payments (${sum_minimums:,.2f})."
-    )
-    st.stop()
+st.session_state.dp_monthly_budget = float(monthly_budget)
 
 # ── Calculate ────────────────────────────────────────────────────────────────
 
 if st.button("Calculate", type="primary"):
+    # A failed run must not leave the previous run's table and chart on screen.
+    st.session_state.pop("dp_results", None)
+
     loans: list[Loan] = []
     build_errors: list[str] = []
 
     for loan_id in st.session_state.dp_loan_ids:
+        values = st.session_state.dp_loan_values[loan_id]
+        label = str(values["name"]).strip() or f"Loan {loan_id}"
         try:
             mode = (
                 CompoundingMode.DAILY
-                if st.session_state.get(f"dp_comp_{loan_id}") == "Daily"
+                if values["comp"] == "Daily"
                 else CompoundingMode.MONTHLY
             )
-            has_grace = bool(st.session_state.get(f"dp_grace_{loan_id}", False))
-            intro_apr = (
-                Decimal(str(st.session_state.get(f"dp_intro_apr_{loan_id}", 0.0))) / 100
-                if has_grace
-                else None
-            )
-            intro_end = (
-                st.session_state.get(f"dp_intro_end_{loan_id}") if has_grace else None
-            )
+            has_grace = bool(values["grace"])
+            intro_apr = Decimal(str(values["intro_apr"])) / 100 if has_grace else None
+            intro_end = values["intro_end"] if has_grace else None
             loans.append(
                 Loan(
-                    name=str(
-                        st.session_state.get(f"dp_name_{loan_id}", f"Loan {loan_id}")
-                    ),
-                    balance=Decimal(
-                        str(st.session_state.get(f"dp_balance_{loan_id}", 0.0))
-                    ),
-                    apr=Decimal(str(st.session_state.get(f"dp_apr_{loan_id}", 0.0)))
-                    / 100,
-                    min_payment=Decimal(
-                        str(st.session_state.get(f"dp_min_{loan_id}", 0.0))
-                    ),
+                    name=str(values["name"]),
+                    balance=Decimal(str(values["balance"])),
+                    apr=Decimal(str(values["apr"])) / 100,
+                    min_payment=Decimal(str(values["min"])),
                     compounding_mode=mode,
                     intro_apr=intro_apr,
                     intro_end_date=intro_end,
                 )
             )
         except Exception as exc:
-            build_errors.append(f"Loan {loan_id}: {exc}")
+            build_errors.append(f"{label}: {exc}")
 
     if build_errors:
         for err in build_errors:
