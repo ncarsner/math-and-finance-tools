@@ -10,9 +10,9 @@ from math_finance_tools.debt_payoff import (
     CompoundingMode,
     HorizonExceededError,
     Loan,
+    StrategyVerdict,
+    compare_strategies,
     minimum_budget_to_clear,
-    simulate_best_avalanche,
-    simulate_payoff,
 )
 
 st.title("Debt Payoff Calculator")
@@ -21,6 +21,7 @@ COMPOUNDING_OPTIONS = ["Monthly", "Daily"]
 
 # Avalanche runs both orderings and keeps the cheaper one; the label says which,
 # so the computed choice stays visible instead of becoming a hidden heuristic.
+SNOWBALL_LABEL = "Snowball (lowest balance first)"
 AVALANCHE_LABELS = {
     "static": "Avalanche (rate order)",
     "effective": "Avalanche (promotional-rate aware)",
@@ -227,13 +228,9 @@ if st.button("Calculate", type="primary"):
     else:
         try:
             budget_dec = Decimal(str(monthly_budget))
-            sb = simulate_payoff(loans, budget_dec, "snowball", start_date)
-            av = simulate_best_avalanche(loans, budget_dec, start_date)
-            st.session_state.dp_results = {
-                "snowball": sb,
-                "avalanche": list(av.results),
-                "avalanche_label": AVALANCHE_LABELS[av.ordering],
-            }
+            st.session_state.dp_results = compare_strategies(
+                loans, budget_dec, start_date
+            )
         except HorizonExceededError:
             needed = minimum_budget_to_clear(loans, start_date).to_integral_value(
                 rounding=ROUND_CEILING
@@ -249,28 +246,82 @@ if st.button("Calculate", type="primary"):
 # ── Results ───────────────────────────────────────────────────────────────────
 
 if "dp_results" in st.session_state:
-    res = st.session_state.dp_results
-    snowball_res = res["snowball"]
-    avalanche_res = res["avalanche"]
-    avalanche_label = res["avalanche_label"]
+    verdict: StrategyVerdict = st.session_state.dp_results
+    snowball_res = list(verdict.snowball)
+    avalanche_res = list(verdict.avalanche.results)
+    avalanche_label = AVALANCHE_LABELS[verdict.avalanche_ordering]
+
+    # ── Verdict ──────────────────────────────────────────────────────────────
+    #
+    # A winner is named at every margin: a small win is reported as small,
+    # never softened into a tie.
+
+    def _months(n: int) -> str:
+        return f"{n} month" if n == 1 else f"{n} months"
+
+    winner_label = SNOWBALL_LABEL if verdict.winner == "snowball" else avalanche_label
+    if verdict.months_delta > 0:
+        timing = f"and finishes {_months(verdict.months_delta)} sooner"
+    elif verdict.months_delta < 0:
+        timing = f"but takes {_months(-verdict.months_delta)} longer"
+    else:
+        timing = "and finishes in the same month"
+
+    st.subheader("Verdict")
+    if verdict.interest_delta > 0:
+        st.success(
+            f"**{winner_label}** saves **${verdict.interest_delta:,.2f}** "
+            f"in interest {timing}."
+        )
+    else:
+        sf = verdict.snowball_first_clear_months
+        af = verdict.avalanche_first_clear_months
+        if sf < af:
+            reason = (
+                "so it goes to snowball, which clears its first loan sooner: "
+                f"month {sf} against month {af}."
+            )
+        elif sf == af:
+            reason = (
+                "and both clear their first loan in the same month, so the tie "
+                "goes to snowball."
+            )
+        else:
+            reason = (
+                "so the tie goes to snowball, though avalanche clears its first "
+                f"loan sooner: month {af} against month {sf}."
+            )
+        st.success(
+            f"**{winner_label}** — both strategies cost "
+            f"${verdict.winner_total_interest:,.2f} in interest, {reason}"
+        )
 
     st.subheader("Comparison")
 
-    def _summary_row(method_results: list, label: str) -> dict:  # type: ignore[type-arg]
+    def _summary_row(
+        method_results: list,  # type: ignore[type-arg]
+        label: str,
+        first_clear_months: int,
+    ) -> dict:  # type: ignore[type-arg]
         total_interest = sum(r.total_interest for r in method_results)
         payoff_date = max(r.payoff_date for r in method_results)
         months_count = len({s.month for r in method_results for s in r.snapshots})
         return {
             "Method": label,
             "Total Interest": f"${float(total_interest):,.2f}",
+            "First loan cleared": f"Month {first_clear_months}",
             "Months": months_count,
             "Payoff Date": payoff_date.strftime("%b %Y"),
         }
 
     st.dataframe(
         [
-            _summary_row(snowball_res, "Snowball (lowest balance first)"),
-            _summary_row(avalanche_res, avalanche_label),
+            _summary_row(
+                snowball_res, SNOWBALL_LABEL, verdict.snowball_first_clear_months
+            ),
+            _summary_row(
+                avalanche_res, avalanche_label, verdict.avalanche_first_clear_months
+            ),
         ],
         use_container_width=True,
         hide_index=True,
@@ -290,9 +341,7 @@ if "dp_results" in st.session_state:
     av_x, av_y = _balance_series(avalanche_res)
 
     fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(x=sb_x, y=sb_y, name="Snowball (lowest balance first)", mode="lines")
-    )
+    fig.add_trace(go.Scatter(x=sb_x, y=sb_y, name=SNOWBALL_LABEL, mode="lines"))
     fig.add_trace(go.Scatter(x=av_x, y=av_y, name=avalanche_label, mode="lines"))
     fig.update_layout(
         xaxis_title="Month",
@@ -323,5 +372,5 @@ if "dp_results" in st.session_state:
                 table_rows.append(row)
             st.dataframe(table_rows, use_container_width=True, hide_index=True)
 
-    _render_detail(snowball_res, "Snowball (lowest balance first)")
+    _render_detail(snowball_res, SNOWBALL_LABEL)
     _render_detail(avalanche_res, avalanche_label)

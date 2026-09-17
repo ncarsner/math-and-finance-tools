@@ -48,3 +48,24 @@ class AvalancheOutcome:
     results: tuple[PayoffResult, ...]
     ordering: Literal["static", "effective"]
     total_interest: Decimal
+
+
+@dataclass(frozen=True)
+class StrategyVerdict:
+    """Snowball against the better avalanche ordering, with a winner always named.
+
+    Month counts are inclusive of the start month. `months_delta` is the loser's
+    total duration minus the winner's, so it is negative when the cheaper
+    strategy takes longer.
+    """
+
+    winner: Literal["snowball", "avalanche"]
+    winner_total_interest: Decimal
+    loser_total_interest: Decimal
+    interest_delta: Decimal
+    months_delta: int
+    snowball_first_clear_months: int
+    avalanche_first_clear_months: int
+    avalanche_ordering: Literal["static", "effective"]
+    snowball: tuple[PayoffResult, ...]
+    avalanche: AvalancheOutcome

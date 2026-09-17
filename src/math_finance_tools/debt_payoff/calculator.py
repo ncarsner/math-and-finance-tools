@@ -10,6 +10,7 @@ from math_finance_tools.debt_payoff.models import (
     Loan,
     MonthlySnapshot,
     PayoffResult,
+    StrategyVerdict,
 )
 
 CENTS = Decimal("0.01")
@@ -205,6 +206,58 @@ def simulate_best_avalanche(
         )
     # min() keeps the first of equal keys, and static is listed first
     return min(outcomes, key=lambda o: o.total_interest)
+
+
+def _months_through(start_date: date, month: date) -> int:
+    """Whole months from `start_date` through `month`, counting both ends."""
+    return (month.year - start_date.year) * 12 + month.month - start_date.month + 1
+
+
+def compare_strategies(
+    loans: list[Loan],
+    budget: Decimal,
+    start_date: date,
+    max_months: int = HORIZON_MONTHS,
+) -> StrategyVerdict:
+    """Run snowball and the better avalanche ordering and name the cheaper one.
+
+    A tie in total interest goes to snowball: its earlier first clear is then
+    the only thing separating them.
+    """
+    snowball = tuple(simulate_payoff(loans, budget, "snowball", start_date, max_months))
+    avalanche = simulate_best_avalanche(loans, budget, start_date, max_months)
+
+    snowball_interest = sum((r.total_interest for r in snowball), Decimal("0"))
+    snowball_months = _months_through(start_date, max(r.payoff_date for r in snowball))
+    avalanche_months = _months_through(
+        start_date, max(r.payoff_date for r in avalanche.results)
+    )
+
+    if avalanche.total_interest < snowball_interest:
+        winner: Literal["snowball", "avalanche"] = "avalanche"
+        winner_interest, loser_interest = avalanche.total_interest, snowball_interest
+        months_delta = snowball_months - avalanche_months
+    else:
+        winner = "snowball"
+        winner_interest, loser_interest = snowball_interest, avalanche.total_interest
+        months_delta = avalanche_months - snowball_months
+
+    return StrategyVerdict(
+        winner=winner,
+        winner_total_interest=winner_interest,
+        loser_total_interest=loser_interest,
+        interest_delta=loser_interest - winner_interest,
+        months_delta=months_delta,
+        snowball_first_clear_months=_months_through(
+            start_date, min(r.payoff_date for r in snowball)
+        ),
+        avalanche_first_clear_months=_months_through(
+            start_date, min(r.payoff_date for r in avalanche.results)
+        ),
+        avalanche_ordering=avalanche.ordering,
+        snowball=snowball,
+        avalanche=avalanche,
+    )
 
 
 def minimum_budget_to_clear(
