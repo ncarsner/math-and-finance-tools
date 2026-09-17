@@ -1,12 +1,18 @@
 from collections import defaultdict
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from typing import Any
 
 import plotly.graph_objects as go
 import streamlit as st
 
-from math_finance_tools.debt_payoff import CompoundingMode, Loan, simulate_payoff
+from math_finance_tools.debt_payoff import (
+    CompoundingMode,
+    HorizonExceededError,
+    Loan,
+    minimum_budget_to_clear,
+    simulate_payoff,
+)
 
 st.title("Debt Payoff Calculator")
 
@@ -216,6 +222,15 @@ if st.button("Calculate", type="primary"):
             sb = simulate_payoff(loans, budget_dec, "snowball", start_date)
             av = simulate_payoff(loans, budget_dec, "avalanche", start_date)
             st.session_state.dp_results = {"snowball": sb, "avalanche": av}
+        except HorizonExceededError:
+            needed = minimum_budget_to_clear(loans, start_date).to_integral_value(
+                rounding=ROUND_CEILING
+            )
+            st.error(
+                f"**Impossible at this budget.** At ${monthly_budget:,.2f} a month "
+                "these loans are not paid off within ten years. A monthly budget of "
+                f"**${needed:,}** would clear them within ten years."
+            )
         except ValueError as exc:
             st.error(str(exc))
 

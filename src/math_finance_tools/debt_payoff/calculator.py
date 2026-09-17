@@ -4,12 +4,14 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from math_finance_tools.debt_payoff.models import (
     CompoundingMode,
+    HorizonExceededError,
     Loan,
     MonthlySnapshot,
     PayoffResult,
 )
 
 CENTS = Decimal("0.01")
+HORIZON_MONTHS = 120
 
 
 def apply_compounding(
@@ -30,7 +32,7 @@ def simulate_payoff(
     budget: Decimal,
     method: str,
     start_date: date,
-    max_months: int = 1200,
+    max_months: int = HORIZON_MONTHS,
 ) -> list[PayoffResult]:
     if not loans:
         raise ValueError("loans list must not be empty")
@@ -129,7 +131,9 @@ def simulate_payoff(
         months_elapsed += 1
 
     if months_elapsed >= max_months and any(balances[ln.name] > 0 for ln in loans):
-        raise ValueError(f"simulation did not converge within {max_months} months")
+        raise HorizonExceededError(
+            f"simulation did not converge within {max_months} months"
+        )
 
     return [
         PayoffResult(
@@ -146,3 +150,54 @@ def simulate_payoff(
         )
         for loan in loans
     ]
+
+
+def minimum_budget_to_clear(
+    loans: list[Loan],
+    start_date: date,
+    max_months: int = HORIZON_MONTHS,
+    tolerance: Decimal = Decimal("1"),
+) -> Decimal:
+    """Smallest monthly budget, to within `tolerance`, that clears every loan
+    within `max_months` under both snowball and avalanche orderings."""
+    if tolerance < CENTS:
+        raise ValueError("tolerance must be at least one cent")
+
+    def clears(budget: Decimal) -> bool:
+        try:
+            for method in ("snowball", "avalanche"):
+                simulate_payoff(loans, budget, method, start_date, max_months)
+        except HorizonExceededError:
+            return False
+        return True
+
+    low = sum((ln.min_payment for ln in loans), Decimal("0"))
+    if clears(low):
+        return low
+
+    # Every balance plus a 31-day month's interest at the higher of its two
+    # rates is paid off in full in the first month.
+    high = max(
+        low,
+        sum(
+            (
+                ln.balance
+                + apply_compounding(
+                    ln.balance,
+                    max(ln.apr, ln.intro_apr or Decimal("0")),
+                    ln.compounding_mode,
+                    31,
+                )
+                for ln in loans
+            ),
+            Decimal("0"),
+        ),
+    )
+
+    while high - low > tolerance:
+        mid = ((low + high) / 2).quantize(CENTS, rounding=ROUND_HALF_UP)
+        if clears(mid):
+            high = mid
+        else:
+            low = mid
+    return high

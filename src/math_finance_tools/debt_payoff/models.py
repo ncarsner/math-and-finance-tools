@@ -4,6 +4,10 @@ from decimal import Decimal
 from enum import Enum
 
 
+class HorizonExceededError(ValueError):
+    """The debt cannot be cleared within the simulation horizon at this budget."""
+
+
 class CompoundingMode(Enum):
     MONTHLY = "monthly"
     DAILY = "daily"
