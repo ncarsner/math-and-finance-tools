@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from enum import Enum
+from typing import Literal
 
 
 class HorizonExceededError(ValueError):
@@ -40,3 +41,10 @@ class PayoffResult:
     snapshots: tuple[MonthlySnapshot, ...]
     total_interest: Decimal
     payoff_date: date
+
+
+@dataclass(frozen=True)
+class AvalancheOutcome:
+    results: tuple[PayoffResult, ...]
+    ordering: Literal["static", "effective"]
+    total_interest: Decimal

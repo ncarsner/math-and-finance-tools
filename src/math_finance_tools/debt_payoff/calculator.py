@@ -1,8 +1,10 @@
 import calendar
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal
 
 from math_finance_tools.debt_payoff.models import (
+    AvalancheOutcome,
     CompoundingMode,
     HorizonExceededError,
     Loan,
@@ -12,6 +14,7 @@ from math_finance_tools.debt_payoff.models import (
 
 CENTS = Decimal("0.01")
 HORIZON_MONTHS = 120
+METHODS = frozenset({"snowball", "avalanche", "avalanche_effective"})
 
 
 def apply_compounding(
@@ -25,6 +28,17 @@ def apply_compounding(
     return (principal * ((1 + apr / 365) ** days_in_month - 1)).quantize(
         CENTS, rounding=ROUND_HALF_UP
     )
+
+
+def _effective_apr(loan: Loan, year: int, month: int) -> Decimal:
+    """The promotional rate through the end of its final month, else the go-to rate."""
+    if (
+        loan.intro_apr is not None
+        and loan.intro_end_date is not None
+        and (year, month) <= (loan.intro_end_date.year, loan.intro_end_date.month)
+    ):
+        return loan.intro_apr
+    return loan.apr
 
 
 def simulate_payoff(
@@ -48,12 +62,14 @@ def simulate_payoff(
     if budget < sum(loan.min_payment for loan in loans):
         raise ValueError("budget must be >= sum of minimum payments")
 
-    if method not in {"snowball", "avalanche"}:
+    if method not in METHODS:
         raise ValueError(f"unknown method: {method!r}")
 
     if method == "snowball":
         priority_order = sorted(loans, key=lambda ln: (ln.balance, ln.name))
     else:
+        # "avalanche" sorts once by go-to rate; "avalanche_effective" re-sorts
+        # each month below, by the rate in effect that month.
         priority_order = sorted(loans, key=lambda ln: (-ln.apr, ln.name))
 
     balances: dict[str, Decimal] = {ln.name: ln.balance for ln in loans}
@@ -72,17 +88,11 @@ def simulate_payoff(
         # Accrue interest
         interest_charged: dict[str, Decimal] = {}
         for loan in active_loans:
-            if (
-                loan.intro_apr is not None
-                and loan.intro_end_date is not None
-                and (current_year, current_month)
-                <= (loan.intro_end_date.year, loan.intro_end_date.month)
-            ):
-                effective_apr = loan.intro_apr
-            else:
-                effective_apr = loan.apr
             interest = apply_compounding(
-                balances[loan.name], effective_apr, loan.compounding_mode, days
+                balances[loan.name],
+                _effective_apr(loan, current_year, current_month),
+                loan.compounding_mode,
+                days,
             )
             balances[loan.name] += interest
             interest_charged[loan.name] = interest
@@ -97,6 +107,14 @@ def simulate_payoff(
             min_paid[loan.name] = capped
 
         # Distribute surplus in priority order
+        if method == "avalanche_effective":
+            priority_order = sorted(
+                loans,
+                key=lambda ln: (
+                    -_effective_apr(ln, current_year, current_month),
+                    ln.name,
+                ),
+            )
         extra_paid: dict[str, Decimal] = {}
         for loan in priority_order:
             if pool <= 0:
@@ -152,6 +170,43 @@ def simulate_payoff(
     ]
 
 
+_AVALANCHE_ORDERINGS: tuple[tuple[Literal["static", "effective"], str], ...] = (
+    ("static", "avalanche"),
+    ("effective", "avalanche_effective"),
+)
+
+
+def simulate_best_avalanche(
+    loans: list[Loan],
+    budget: Decimal,
+    start_date: date,
+    max_months: int = HORIZON_MONTHS,
+) -> AvalancheOutcome:
+    """Run both avalanche orderings and return the one that cost less interest.
+
+    An ordering that overruns the horizon is not a candidate. Ties go to static.
+    """
+    outcomes: list[AvalancheOutcome] = []
+    for ordering, method in _AVALANCHE_ORDERINGS:
+        try:
+            results = simulate_payoff(loans, budget, method, start_date, max_months)
+        except HorizonExceededError:
+            continue
+        outcomes.append(
+            AvalancheOutcome(
+                results=tuple(results),
+                ordering=ordering,
+                total_interest=sum((r.total_interest for r in results), Decimal("0")),
+            )
+        )
+    if not outcomes:
+        raise HorizonExceededError(
+            f"simulation did not converge within {max_months} months"
+        )
+    # min() keeps the first of equal keys, and static is listed first
+    return min(outcomes, key=lambda o: o.total_interest)
+
+
 def minimum_budget_to_clear(
     loans: list[Loan],
     start_date: date,
@@ -159,14 +214,14 @@ def minimum_budget_to_clear(
     tolerance: Decimal = Decimal("1"),
 ) -> Decimal:
     """Smallest monthly budget, to within `tolerance`, that clears every loan
-    within `max_months` under both snowball and avalanche orderings."""
+    within `max_months` under snowball and under the better avalanche ordering."""
     if tolerance < CENTS:
         raise ValueError("tolerance must be at least one cent")
 
     def clears(budget: Decimal) -> bool:
         try:
-            for method in ("snowball", "avalanche"):
-                simulate_payoff(loans, budget, method, start_date, max_months)
+            simulate_payoff(loans, budget, "snowball", start_date, max_months)
+            simulate_best_avalanche(loans, budget, start_date, max_months)
         except HorizonExceededError:
             return False
         return True
