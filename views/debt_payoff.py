@@ -11,12 +11,20 @@ from math_finance_tools.debt_payoff import (
     HorizonExceededError,
     Loan,
     minimum_budget_to_clear,
+    simulate_best_avalanche,
     simulate_payoff,
 )
 
 st.title("Debt Payoff Calculator")
 
 COMPOUNDING_OPTIONS = ["Monthly", "Daily"]
+
+# Avalanche runs both orderings and keeps the cheaper one; the label says which,
+# so the computed choice stays visible instead of becoming a hidden heuristic.
+AVALANCHE_LABELS = {
+    "static": "Avalanche (rate order)",
+    "effective": "Avalanche (promotional-rate aware)",
+}
 
 # ── Session state initialisation ─────────────────────────────────────────────
 #
@@ -220,8 +228,12 @@ if st.button("Calculate", type="primary"):
         try:
             budget_dec = Decimal(str(monthly_budget))
             sb = simulate_payoff(loans, budget_dec, "snowball", start_date)
-            av = simulate_payoff(loans, budget_dec, "avalanche", start_date)
-            st.session_state.dp_results = {"snowball": sb, "avalanche": av}
+            av = simulate_best_avalanche(loans, budget_dec, start_date)
+            st.session_state.dp_results = {
+                "snowball": sb,
+                "avalanche": list(av.results),
+                "avalanche_label": AVALANCHE_LABELS[av.ordering],
+            }
         except HorizonExceededError:
             needed = minimum_budget_to_clear(loans, start_date).to_integral_value(
                 rounding=ROUND_CEILING
@@ -240,6 +252,7 @@ if "dp_results" in st.session_state:
     res = st.session_state.dp_results
     snowball_res = res["snowball"]
     avalanche_res = res["avalanche"]
+    avalanche_label = res["avalanche_label"]
 
     st.subheader("Comparison")
 
@@ -257,7 +270,7 @@ if "dp_results" in st.session_state:
     st.dataframe(
         [
             _summary_row(snowball_res, "Snowball (lowest balance first)"),
-            _summary_row(avalanche_res, "Avalanche (highest interest first)"),
+            _summary_row(avalanche_res, avalanche_label),
         ],
         use_container_width=True,
         hide_index=True,
@@ -280,11 +293,7 @@ if "dp_results" in st.session_state:
     fig.add_trace(
         go.Scatter(x=sb_x, y=sb_y, name="Snowball (lowest balance first)", mode="lines")
     )
-    fig.add_trace(
-        go.Scatter(
-            x=av_x, y=av_y, name="Avalanche (highest interest first)", mode="lines"
-        )
-    )
+    fig.add_trace(go.Scatter(x=av_x, y=av_y, name=avalanche_label, mode="lines"))
     fig.update_layout(
         xaxis_title="Month",
         yaxis_title="Total Remaining Balance ($)",
@@ -315,4 +324,4 @@ if "dp_results" in st.session_state:
             st.dataframe(table_rows, use_container_width=True, hide_index=True)
 
     _render_detail(snowball_res, "Snowball (lowest balance first)")
-    _render_detail(avalanche_res, "Avalanche (highest interest first)")
+    _render_detail(avalanche_res, avalanche_label)
