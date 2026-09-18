@@ -6,6 +6,7 @@ from typing import Literal
 from math_finance_tools.debt_payoff.models import (
     AvalancheOutcome,
     CompoundingMode,
+    ExtraPaymentComparison,
     HorizonExceededError,
     Loan,
     MonthlySnapshot,
@@ -309,3 +310,55 @@ def minimum_budget_to_clear(
         else:
             low = mid
     return high
+
+
+def _portfolio_payoff_date(results: list[PayoffResult]) -> date:
+    """The month the last loan clears — the whole plan is done then, not before."""
+    return max(r.payoff_date for r in results)
+
+
+def _total_interest(results: list[PayoffResult]) -> Decimal:
+    return sum((r.total_interest for r in results), Decimal("0"))
+
+
+def compare_extra_payment(
+    loans: list[Loan],
+    budget: Decimal,
+    additional_budget: Decimal,
+    method: str,
+    start_date: date,
+    max_months: int = HORIZON_MONTHS,
+) -> ExtraPaymentComparison:
+    """Run the same loan set twice and diff it: what another monthly amount buys.
+
+    `additional_budget` is the increment between the two runs, not the surplus
+    cascaded within one of them. Both runs use `method`, so the comparison
+    isolates the money and holds the strategy fixed.
+    """
+    if additional_budget < 0:
+        raise ValueError("additional_budget must not be negative")
+
+    baseline = simulate_payoff(loans, budget, method, start_date, max_months)
+    accelerated = simulate_payoff(
+        loans, budget + additional_budget, method, start_date, max_months
+    )
+
+    baseline_date = _portfolio_payoff_date(baseline)
+    accelerated_date = _portfolio_payoff_date(accelerated)
+    baseline_interest = _total_interest(baseline)
+    accelerated_interest = _total_interest(accelerated)
+
+    return ExtraPaymentComparison(
+        baseline=tuple(baseline),
+        accelerated=tuple(accelerated),
+        baseline_payoff_date=baseline_date,
+        accelerated_payoff_date=accelerated_date,
+        months_saved=(baseline_date.year - accelerated_date.year) * 12
+        + baseline_date.month
+        - accelerated_date.month,
+        baseline_total_interest=baseline_interest,
+        accelerated_total_interest=accelerated_interest,
+        interest_saved=(baseline_interest - accelerated_interest).quantize(
+            CENTS, rounding=ROUND_HALF_UP
+        ),
+    )

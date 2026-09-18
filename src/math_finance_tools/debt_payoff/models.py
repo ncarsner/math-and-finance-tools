@@ -69,3 +69,21 @@ class StrategyVerdict:
     avalanche_ordering: Literal["static", "effective"]
     snowball: tuple[PayoffResult, ...]
     avalanche: AvalancheOutcome
+
+
+@dataclass(frozen=True)
+class ExtraPaymentComparison:
+    """One loan set run twice: at the budget, and at the budget plus an increment.
+
+    `months_saved` and `interest_saved` are the baseline figures minus the
+    accelerated ones, so both are non-negative.
+    """
+
+    baseline: tuple[PayoffResult, ...]
+    accelerated: tuple[PayoffResult, ...]
+    baseline_payoff_date: date
+    accelerated_payoff_date: date
+    months_saved: int
+    baseline_total_interest: Decimal
+    accelerated_total_interest: Decimal
+    interest_saved: Decimal
