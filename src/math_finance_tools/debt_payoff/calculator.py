@@ -172,9 +172,14 @@ def simulate_payoff(
     ]
 
 
-_AVALANCHE_ORDERINGS: tuple[tuple[Literal["static", "effective"], str], ...] = (
-    ("static", "avalanche"),
-    ("effective", "avalanche_effective"),
+# Static is listed first so that a tie between the two orderings goes to it.
+AVALANCHE_METHODS: dict[Literal["static", "effective"], str] = {
+    "static": "avalanche",
+    "effective": "avalanche_effective",
+}
+
+_AVALANCHE_ORDERINGS: tuple[tuple[Literal["static", "effective"], str], ...] = tuple(
+    AVALANCHE_METHODS.items()
 )
 
 
