@@ -1,4 +1,5 @@
 from math_finance_tools.debt_payoff.calculator import (
+    AVALANCHE_METHODS as AVALANCHE_METHODS,
     HORIZON_MONTHS as HORIZON_MONTHS,
     apply_compounding as apply_compounding,
     compare_extra_payment as compare_extra_payment,
@@ -19,6 +20,7 @@ from math_finance_tools.debt_payoff.models import (
 )
 
 __all__ = [
+    "AVALANCHE_METHODS",
     "HORIZON_MONTHS",
     "AvalancheOutcome",
     "CompoundingMode",

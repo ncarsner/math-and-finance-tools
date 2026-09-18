@@ -7,10 +7,13 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from math_finance_tools.debt_payoff import (
+    AVALANCHE_METHODS,
     CompoundingMode,
+    ExtraPaymentComparison,
     HorizonExceededError,
     Loan,
     StrategyVerdict,
+    compare_extra_payment,
     compare_strategies,
     minimum_budget_to_clear,
 )
@@ -56,6 +59,12 @@ if "dp_loan_ids" not in st.session_state:
     }
 
 
+def clear_results() -> None:
+    """A changed input invalidates every stored run, not just the first."""
+    st.session_state.pop("dp_results", None)
+    st.session_state.pop("dp_extra", None)
+
+
 def add_loan() -> None:
     new_id: int = st.session_state.dp_next_id
     st.session_state.dp_next_id += 1
@@ -63,13 +72,13 @@ def add_loan() -> None:
         len(st.session_state.dp_loan_ids) + 1
     )
     st.session_state.dp_loan_ids.append(new_id)
-    st.session_state.pop("dp_results", None)
+    clear_results()
 
 
 def remove_loan(loan_id: int) -> None:
     st.session_state.dp_loan_ids.remove(loan_id)
     st.session_state.dp_loan_values.pop(loan_id, None)
-    st.session_state.pop("dp_results", None)
+    clear_results()
 
 
 # ── Loan input rows ──────────────────────────────────────────────────────────
@@ -187,11 +196,23 @@ monthly_budget = slider_col.slider(
 )
 st.session_state.dp_monthly_budget = float(monthly_budget)
 
+# An increment *between* two runs, never called extra: surplus is already the
+# budget above the minimums cascaded *within* a run. At zero the comparison
+# does not run at all, so it costs nothing to anyone not using it.
+additional_budget = st.number_input(
+    "Additional monthly payment ($)",
+    min_value=0.0,
+    value=float(st.session_state.get("dp_additional_budget", 0.0)),
+    step=25.0,
+    help="What a further amount each month would buy, on top of the budget above",
+)
+st.session_state.dp_additional_budget = float(additional_budget)
+
 # ── Calculate ────────────────────────────────────────────────────────────────
 
 if st.button("Calculate", type="primary"):
     # A failed run must not leave the previous run's table and chart on screen.
-    st.session_state.pop("dp_results", None)
+    clear_results()
 
     loans: list[Loan] = []
     build_errors: list[str] = []
@@ -228,9 +249,26 @@ if st.button("Calculate", type="primary"):
     else:
         try:
             budget_dec = Decimal(str(monthly_budget))
-            st.session_state.dp_results = compare_strategies(
-                loans, budget_dec, start_date
-            )
+            verdict_result = compare_strategies(loans, budget_dec, start_date)
+            extra_result: dict[str, Any] | None = None
+            if additional_budget > 0:
+                additional_dec = Decimal(str(additional_budget))
+                avalanche_method = AVALANCHE_METHODS[verdict_result.avalanche_ordering]
+                # Each strategy is compared against itself at the higher budget,
+                # so the increment is the only thing that moves.
+                extra_result = {
+                    "additional": float(additional_budget),
+                    "snowball": compare_extra_payment(
+                        loans, budget_dec, additional_dec, "snowball", start_date
+                    ),
+                    "avalanche": compare_extra_payment(
+                        loans, budget_dec, additional_dec, avalanche_method, start_date
+                    ),
+                }
+            # Stored last: a failure in any run above leaves nothing on screen.
+            st.session_state.dp_results = verdict_result
+            if extra_result is not None:
+                st.session_state.dp_extra = extra_result
         except HorizonExceededError:
             needed = minimum_budget_to_clear(loans, start_date).to_integral_value(
                 rounding=ROUND_CEILING
@@ -327,6 +365,34 @@ if "dp_results" in st.session_state:
         hide_index=True,
     )
 
+    extra = st.session_state.get("dp_extra")
+
+    def _dollars(amount: float) -> str:
+        """Whole dollars read cleaner; cents show only when there are any."""
+        return f"${amount:,.0f}" if amount.is_integer() else f"${amount:,.2f}"
+
+    if extra is not None:
+        additional_amount = float(extra["additional"])
+        st.subheader(f"Adding {_dollars(additional_amount)} a Month")
+
+        def _savings_row(comparison: ExtraPaymentComparison, label: str) -> dict:  # type: ignore[type-arg]
+            return {
+                "Method": label,
+                "Months saved": comparison.months_saved,
+                "Interest saved": f"${float(comparison.interest_saved):,.2f}",
+                "Payoff Date": comparison.accelerated_payoff_date.strftime("%b %Y"),
+                "Was": comparison.baseline_payoff_date.strftime("%b %Y"),
+            }
+
+        st.dataframe(
+            [
+                _savings_row(extra["snowball"], SNOWBALL_LABEL),
+                _savings_row(extra["avalanche"], avalanche_label),
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+
     st.subheader("Remaining Debt Over Time")
 
     def _balance_series(method_results: list) -> tuple[list, list]:  # type: ignore[type-arg]
@@ -343,6 +409,24 @@ if "dp_results" in st.session_state:
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=sb_x, y=sb_y, name=SNOWBALL_LABEL, mode="lines"))
     fig.add_trace(go.Scatter(x=av_x, y=av_y, name=avalanche_label, mode="lines"))
+
+    if extra is not None:
+        # Four traces with the comparison active: each strategy against itself.
+        suffix = f" + {_dollars(float(extra['additional']))}"
+        for key, label in (
+            ("snowball", SNOWBALL_LABEL),
+            ("avalanche", avalanche_label),
+        ):
+            acc_x, acc_y = _balance_series(list(extra[key].accelerated))
+            fig.add_trace(
+                go.Scatter(
+                    x=acc_x,
+                    y=acc_y,
+                    name=label + suffix,
+                    mode="lines",
+                    line=dict(dash="dash"),
+                )
+            )
     fig.update_layout(
         xaxis_title="Month",
         yaxis_title="Total Remaining Balance ($)",
