@@ -93,6 +93,11 @@ accounts = [
 
 result = calculate_composite_rate(accounts)
 
+# Handed to the Debt vs. Invest page as its prefilled debt rate. A plain key,
+# namespaced away from every widget `key=` on either page, so Streamlit does
+# not garbage-collect it on navigation. Write-only from here.
+st.session_state.shared_composite_apr = float(result.composite_apr) * 100
+
 # ── Metrics ───────────────────────────────────────────────────────────────────
 
 st.subheader("Results")
