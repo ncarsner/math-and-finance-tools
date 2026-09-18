@@ -7,6 +7,7 @@ pg = st.navigation(
         st.Page("views/home.py", title="Home", default=True),
         st.Page("views/debt_payoff.py", title="Debt Payoff Calculator"),
         st.Page("views/composite_rate.py", title="Composite Rate Calculator"),
+        st.Page("views/debt_vs_invest.py", title="Debt vs. Invest"),
     ]
 )
 pg.run()
