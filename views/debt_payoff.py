@@ -5,6 +5,7 @@ from typing import Any
 
 import plotly.graph_objects as go
 import streamlit as st
+from views._presets import PRESETS, loan_values
 
 from math_finance_tools.debt_payoff import (
     AVALANCHE_METHODS,
@@ -79,6 +80,58 @@ def remove_loan(loan_id: int) -> None:
     st.session_state.dp_loan_ids.remove(loan_id)
     st.session_state.dp_loan_values.pop(loan_id, None)
     clear_results()
+
+
+def load_preset(name: str) -> None:
+    """Replace the whole form with a worked example.
+
+    The rows get freshly allocated IDs rather than reusing the current ones: a
+    keyed widget keeps its own value across reruns, so a row reusing an existing
+    ID would ignore the `value=` reseeding and keep showing the old entry.
+    Streamlit discards the vacated keys itself once those rows stop rendering.
+    """
+    preset = PRESETS[name]
+    start: date = st.session_state.get("dp_start_date", date.today())
+
+    values = loan_values(preset, start)
+    first_id: int = st.session_state.dp_next_id
+    loan_ids = list(range(first_id, first_id + len(values)))
+    st.session_state.dp_next_id = first_id + len(values)
+    st.session_state.dp_loan_ids = loan_ids
+    st.session_state.dp_loan_values = dict(zip(loan_ids, values, strict=True))
+
+    # Budget first, ceiling with it: the slider is clamped to the ceiling, so a
+    # preset loaded against a lower stored ceiling would silently lose its budget.
+    st.session_state.dp_budget_ceiling = preset.ceiling
+    st.session_state.dp_monthly_budget = preset.budget
+    st.session_state.dp_additional_budget = preset.additional
+    clear_results()
+
+
+# ── Worked examples ──────────────────────────────────────────────────────────
+#
+# A loan set whose balance order matches its rate order makes both strategies
+# pay the same loans in the same sequence, so the table rows agree to the cent
+# and the chart traces sit on top of one another. Each example below inverts
+# that order somewhere, or puts a promotional rate in play.
+
+with st.expander("Load a worked example"):
+    example = str(
+        st.selectbox(
+            "Example",
+            list(PRESETS),
+            key="dp_preset_choice",
+            label_visibility="collapsed",
+        )
+    )
+    st.write(PRESETS[example].summary)
+    st.caption(PRESETS[example].takeaway)
+    st.button(
+        "Load this example",
+        on_click=load_preset,
+        args=(example,),
+        help="Replaces the loans and budget below",
+    )
 
 
 # ── Loan input rows ──────────────────────────────────────────────────────────
