@@ -9,11 +9,6 @@ wheels/
 # Virtual environments
 .venv
 
-AGENTS/
-.claude/
-CLAUDE.md
-ralph.sh
-*-session.md
 .coverage
 plans/
 .*.md
