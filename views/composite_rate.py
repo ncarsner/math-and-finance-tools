@@ -8,7 +8,7 @@ from math_finance_tools.composite_rate import Account, calculate_composite_rate
 
 st.title("Composite Rate Calculator")
 
-# ── Session state initialisation ─────────────────────────────────────────────
+# ── Session state initialization ─────────────────────────────────────────────
 #
 # Streamlit deletes every widget-associated session-state entry when a page
 # stops rendering, so widget keys cannot be the store. Entered values live in

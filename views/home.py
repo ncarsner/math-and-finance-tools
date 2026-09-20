@@ -30,7 +30,7 @@ st.write(
     "Decide whether a spare dollar is worth more against your debt or in the "
     "market. Your debt rate is compared against an expected return after tax — "
     "taken whole in a 401(k) or IRA, reduced by capital gains tax in a "
-    "brokerage — and the page names the side the spread favours. Your composite "
+    "brokerage — and the page names the side the spread favors. Your composite "
     "rate carries over as the debt rate if you have calculated one."
 )
 st.write("Select **Debt vs. Invest** in the sidebar to get started.")

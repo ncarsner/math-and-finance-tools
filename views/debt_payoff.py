@@ -36,7 +36,7 @@ AVALANCHE_LABELS = {
     "effective": "Avalanche (promotional-rate aware)",
 }
 
-# ── Session state initialisation ─────────────────────────────────────────────
+# ── Session state initialization ─────────────────────────────────────────────
 #
 # Streamlit deletes every widget-associated session-state entry when a page
 # stops rendering, so widget keys cannot be the store. Entered values live in

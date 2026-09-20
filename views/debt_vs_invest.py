@@ -44,7 +44,7 @@ debt_apr_pct = rate_col.number_input(
     value=float(st.session_state.get(COMPOSITE_APR_KEY, DEFAULT_DEBT_APR)),
     help=(
         "Enter the rate after any tax deduction you actually claim. "
-        "Deductible interest is not modelled here."
+        "Deductible interest is not modeled here."
     ),
 )
 expected_return_pct = return_col.number_input(
