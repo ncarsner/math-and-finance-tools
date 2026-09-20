@@ -126,7 +126,7 @@ table_rows = [
     }
     for bd in result.per_account_breakdown
 ]
-st.dataframe(table_rows, use_container_width=True, hide_index=True)
+st.dataframe(table_rows, width="stretch", hide_index=True)
 
 # ── Plotly scatter chart ──────────────────────────────────────────────────────
 
@@ -185,4 +185,4 @@ fig.update_layout(
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")

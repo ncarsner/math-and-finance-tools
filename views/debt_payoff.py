@@ -5,6 +5,7 @@ from typing import Any
 
 import plotly.graph_objects as go
 import streamlit as st
+from views._dates import month_label, picker_format
 from views._presets import PRESETS, loan_values
 
 from math_finance_tools.debt_payoff import (
@@ -22,6 +23,10 @@ from math_finance_tools.debt_payoff import (
 st.title("Debt Payoff Calculator")
 
 COMPOUNDING_OPTIONS = ["Monthly", "Daily"]
+
+# The viewer's own ordering where the browser reports one, US ordering when
+# it does not — never Streamlit's YYYY/MM/DD default.
+DATE_FORMAT = picker_format(st.context.locale)
 
 # Avalanche runs both orderings and keeps the cheaper one; the label says which,
 # so the computed choice stays visible instead of becoming a hidden heuristic.
@@ -201,6 +206,7 @@ for loan_id in st.session_state.dp_loan_ids:
                 "Intro end date",
                 value=values["intro_end"],
                 key=f"dp_intro_end_{loan_id}",
+                format=DATE_FORMAT,
             )
 
 st.button("+ Add Loan", on_click=add_loan)
@@ -213,7 +219,9 @@ if "dp_start_date" not in st.session_state:
     st.session_state.dp_start_date: date = date.today()
 
 start_date: date = st.date_input(  # type: ignore[assignment]
-    "Simulation start date", value=st.session_state.dp_start_date
+    "Simulation start date",
+    value=st.session_state.dp_start_date,
+    format=DATE_FORMAT,
 )
 st.session_state.dp_start_date = start_date
 
@@ -402,7 +410,7 @@ if "dp_results" in st.session_state:
             "Total Interest": f"${float(total_interest):,.2f}",
             "First loan cleared": f"Month {first_clear_months}",
             "Months": months_count,
-            "Payoff Date": payoff_date.strftime("%b %Y"),
+            "Payoff Date": month_label(payoff_date, DATE_FORMAT),
         }
 
     st.dataframe(
@@ -414,7 +422,7 @@ if "dp_results" in st.session_state:
                 avalanche_res, avalanche_label, verdict.avalanche_first_clear_months
             ),
         ],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -433,8 +441,10 @@ if "dp_results" in st.session_state:
                 "Method": label,
                 "Months saved": comparison.months_saved,
                 "Interest saved": f"${float(comparison.interest_saved):,.2f}",
-                "Payoff Date": comparison.accelerated_payoff_date.strftime("%b %Y"),
-                "Was": comparison.baseline_payoff_date.strftime("%b %Y"),
+                "Payoff Date": month_label(
+                    comparison.accelerated_payoff_date, DATE_FORMAT
+                ),
+                "Was": month_label(comparison.baseline_payoff_date, DATE_FORMAT),
             }
 
         st.dataframe(
@@ -442,7 +452,7 @@ if "dp_results" in st.session_state:
                 _savings_row(extra["snowball"], SNOWBALL_LABEL),
                 _savings_row(extra["avalanche"], avalanche_label),
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -487,7 +497,7 @@ if "dp_results" in st.session_state:
         yaxis_tickformat=",.0f",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.subheader("Monthly Detail")
 
@@ -500,14 +510,14 @@ if "dp_results" in st.session_state:
             loan_names = [r.loan_name for r in method_results]
             table_rows = []
             for m in all_months:
-                row: dict = {"Month": m.strftime("%b %Y")}
+                row: dict = {"Month": month_label(m, DATE_FORMAT)}
                 for name in loan_names:
                     snap = snap_index.get((name, m))
                     row[name] = (
                         f"${float(snap.remaining_balance):,.2f}" if snap else "—"
                     )
                 table_rows.append(row)
-            st.dataframe(table_rows, use_container_width=True, hide_index=True)
+            st.dataframe(table_rows, width="stretch", hide_index=True)
 
     _render_detail(snowball_res, SNOWBALL_LABEL)
     _render_detail(avalanche_res, avalanche_label)
