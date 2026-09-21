@@ -109,7 +109,7 @@ def test_composite_rate_publishes_its_apr_to_a_plain_key() -> None:
     )
     assert at.session_state["shared_composite_apr"] == expected
 
-    # Navigating is modelled by a fresh run seeded with the surviving keys:
+    # Navigating is modeled by a fresh run seeded with the surviving keys:
     # Streamlit drops the widget-keyed entries and keeps the plain one, so the
     # rate arrives on the other page.
     onward = AppTest.from_file(str(PAGE), default_timeout=60)

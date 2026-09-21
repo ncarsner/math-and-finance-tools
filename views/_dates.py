@@ -27,7 +27,7 @@ YEAR_FIRST_LANGUAGES: Final = frozenset({"ja", "ko", "zh", "hu", "lt", "mn"})
 
 # What to use when there is no locale at all. This project's reader is US-based,
 # so no information means US ordering rather than the Streamlit default nobody
-# asked for. A locale that *is* present but unrecognised is a different case:
+# asked for. A locale that *is* present but unrecognized is a different case:
 # something was reported, and day-first is the world's majority habit.
 FALLBACK: Final = MONTH_FIRST
 
@@ -65,7 +65,7 @@ def picker_format(locale: str | None) -> str:
 def month_label(value: date, picker: str) -> str:
     """A month-resolution date, ordered to match the picker.
 
-    Payoff dates and snapshots are normalised to the first of the month, so the
+    Payoff dates and snapshots are normalized to the first of the month, so the
     day carries no information — printing one would invent precision the
     simulation does not have. Month and year only; with no day in play,
     day-first and month-first readers want the same thing.

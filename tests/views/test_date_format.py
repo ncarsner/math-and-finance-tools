@@ -49,7 +49,7 @@ def test_an_absent_locale_falls_back_to_us_ordering(locale: str | None) -> None:
 
 
 @pytest.mark.parametrize("locale", ["not-a-locale", "xx", "sw-KE"])
-def test_a_reported_but_unrecognised_locale_uses_the_worlds_majority(
+def test_a_reported_but_unrecognized_locale_uses_the_worlds_majority(
     locale: str,
 ) -> None:
     # Something was reported and it is not US-ish, so day-first beats assuming
@@ -70,7 +70,7 @@ def test_a_script_subtag_is_not_mistaken_for_a_region() -> None:
     [(MONTH_FIRST, "5/2035"), (DAY_FIRST, "5/2035"), (YEAR_FIRST, "2035/05")],
 )
 def test_month_labels_drop_the_day(picker: str, expected: str) -> None:
-    # Payoff dates are normalised to the first of the month, so a day would be
+    # Payoff dates are normalized to the first of the month, so a day would be
     # precision the simulation does not have.
     assert month_label(date(2035, 5, 1), picker) == expected
 

@@ -1,7 +1,7 @@
 # Math & Finance Tools
 
 A Streamlit web app with a suite of personal finance calculators. The design
-centre is self-driven debt resolution over a two-to-seven-year horizon: what to
+center is self-driven debt resolution over a two-to-seven-year horizon: what to
 pay first, what it costs, and what paying more would buy.
 
 ## Calculators
@@ -59,11 +59,11 @@ The computed rate carries over to Debt vs. Invest as a starting debt rate.
 Decide whether a spare dollar is worth more against the debt or in the market.
 The debt rate is compared against an expected return **after tax** — taken whole
 in a tax-advantaged account, reduced by capital gains tax in a taxable brokerage —
-and the page names the side the spread favours, or reports indifference when the
+and the page names the side the spread favors, or reports indifference when the
 two are exactly equal.
 
 Both sides are nominal, so inflation cancels between them. Contribution
-schedules, employer match and market paths are not modelled.
+schedules, employer match and market paths are not modeled.
 
 ## Setup
 
